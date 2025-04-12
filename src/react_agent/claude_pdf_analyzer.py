@@ -1,7 +1,6 @@
-import base64
 import os
 import logging
-from typing import List, Dict, Any, Optional
+from typing import Dict, Any, Optional
 import time
 import re
 import anthropic

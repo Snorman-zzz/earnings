@@ -1,11 +1,9 @@
-# financial_analyst_app.py
 import os
 import streamlit as st
 import yfinance as yf
 import time
 import anthropic
 import base64
-import markdown
 import re
 from tenacity import retry, stop_after_attempt, wait_exponential
 from dotenv import load_dotenv
