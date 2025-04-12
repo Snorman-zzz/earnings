@@ -1,9 +1,9 @@
 [project]
-name = "react-agent"
-version = "0.0.1"
-description = "Starter template for making a custom Reasoning and Action agent (using tool calling) in LangGraph."
+name = "financial-analysis"
+version = "0.1.0"
+description = "Financial analyst system for earnings report analysis using Claude and OpenAI"
 authors = [
-    { name = "William Fu-Hinthorn", email = "13333726+hinthornw@users.noreply.github.com" },
+    { name = "Your Name", email = "your.email@example.com" },
 ]
 readme = "README.md"
 license = { text = "MIT" }
@@ -12,16 +12,13 @@ dependencies = [
     "langgraph>=0.2.6",
     "langchain-openai>=0.1.22",
     "langchain-anthropic>=0.1.23",
-    "langchain>=0.2.14",
-    "langchain-fireworks>=0.1.7",
+    "langchain-core>=0.2.14",
     "python-dotenv>=1.0.1",
-    "langchain-community>=0.2.17",
-    "tavily-python>=0.4.0",
-    "langchain-experimental>=0.0.49",
-    "langgraph-cli[inmem]>=0.1.71",
-    "ipykernel"
+    "anthropic>=0.18.0",
+    "yfinance>=0.2.35",
+    "streamlit>=1.33.0",
+    "tenacity>=8.2.3"
 ]
-
 
 [project.optional-dependencies]
 dev = ["mypy>=1.11.1", "ruff>=0.6.1"]
@@ -31,11 +28,10 @@ requires = ["setuptools>=73.0.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools]
-packages = ["langgraph.templates.react_agent", "react_agent"]
+packages = ["langgraph.templates.financial_analysis", "financial_analysis"]
 [tool.setuptools.package-dir]
-"langgraph.templates.react_agent" = "src/react_agent"
-"react_agent" = "src/react_agent"
-
+"langgraph.templates.financial_analysis" = "src/financial_analysis"
+"financial_analysis" = "src/financial_analysis"
 
 [tool.setuptools.package-data]
 "*" = ["py.typed"]
@@ -46,26 +42,15 @@ lint.select = [
     "F",    # pyflakes
     "I",    # isort
     "D",    # pydocstyle
-    "D401", # First line should be in imperative mood
-    "T201",
     "UP",
 ]
 lint.ignore = [
     "UP006",
     "UP007",
-    # We actually do want to import from typing_extensions
     "UP035",
-    # Relax the convention by _not_ requiring documentation for every function parameter.
     "D417",
     "E501",
 ]
-[tool.ruff.lint.per-file-ignores]
-"tests/*" = ["D", "UP"]
+
 [tool.ruff.lint.pydocstyle]
 convention = "google"
-
-[dependency-groups]
-dev = [
-    "langgraph-cli[inmem]>=0.1.71",
-    "ipykernel", 
-]
