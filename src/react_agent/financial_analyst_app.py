@@ -3,9 +3,10 @@ import os
 import streamlit as st
 import yfinance as yf
 import time
-import re
 import anthropic
 import base64
+import markdown
+import re
 from tenacity import retry, stop_after_attempt, wait_exponential
 from dotenv import load_dotenv
 
@@ -92,33 +93,99 @@ def analyze_earnings_documents(client, press_release_bytes, presentation_bytes, 
         4. Forward guidance for next quarter/year if available
         5. Any announced stock splits, dividends, or buybacks
 
-        Format your response with EXACTLY these sections:
+        IMPORTANT: Your output MUST use HTML formatting for the entire response, including tables. Do NOT use markdown tables with pipe characters.
 
-        1. Earnings Calls Table comparing:
-           - Metric | Expected | Reported | Surprise
-           - Include rows for EPS and Revenue with precise values and proper units
+        Create your response with these EXACT sections:
 
-        2. Financials Table showing:
-           - Metric | Current Quarter | Previous Year | Y/Y Change
-           - Include rows for Revenue, Net Income, Diluted EPS, Operating Income, etc.
+        <h2>Earnings Summary</h2>
 
-        3. A concise summary of key findings, performance against expectations, and earnings quality
+        <h3>Earnings Calls</h3>
+        <table>
+        <tr>
+          <th>Metric</th>
+          <th>Expected</th>
+          <th>Reported</th>
+          <th>Surprise</th>
+        </tr>
+        <tr>
+          <td>EPS</td>
+          <td>$X.XX</td>
+          <td>$X.XX</td>
+          <td>X.XX%</td>
+        </tr>
+        <tr>
+          <td>Revenue</td>
+          <td>$XX.XXB</td>
+          <td>$XX.XXB</td>
+          <td>X.XX%</td>
+        </tr>
+        </table>
 
-        4. A price prediction based on the earnings data, using this LaTeX format:
-           $\\text{{Price Prediction}} = \\text{{CurrentPrice}} \\times (1 + \\text{{AdjustmentFactor}}) = \\text{{Result}}$
+        <h3>Financials</h3>
+        <table>
+        <tr>
+          <th>Metric</th>
+          <th>Current Quarter</th>
+          <th>Previous Year</th>
+          <th>Y/Y Change</th>
+        </tr>
+        <tr>
+          <td>Revenue</td>
+          <td>$XX.XXB</td>
+          <td>$XX.XXB</td>
+          <td>XX.XX%</td>
+        </tr>
+        <tr>
+          <td>Net Income</td>
+          <td>$X.XXB</td>
+          <td>$X.XXB</td>
+          <td>XX.XX%</td>
+        </tr>
+        <tr>
+          <td>Diluted EPS</td>
+          <td>$X.XX</td>
+          <td>$X.XX</td>
+          <td>XX.XX%</td>
+        </tr>
+        <tr>
+          <td>Operating Income</td>
+          <td>$X.XXB</td>
+          <td>$X.XXB</td>
+          <td>XX.XX%</td>
+        </tr>
+        <tr>
+          <td>Gross Margin</td>
+          <td>XX.X%</td>
+          <td>XX.X%</td>
+          <td>X.X pts</td>
+        </tr>
+        </table>
+
+        <h3>Key Findings Summary</h3>
+        <p>Write a concise summary of the key findings with proper sentences and spacing between words.</p>
+
+        <h3>Price Prediction</h3>
+        <p>Price Prediction = CurrentPrice × (1 + AdjustmentFactor) = NewPrice</p>
+
+        For example:
+        <p>Price Prediction = 110.93 × (1 + 0.10) = 122.02</p>
 
         # IMPORTANT UNIT NORMALIZATION INSTRUCTIONS:
         Before calculating any percentage changes or surprises, normalize units first:
         1. For values with different units (like "11.89B" vs "39.33M"), convert both to the same unit first
         2. Convert all values to the same unit (millions or billions) before calculating percentages
-        3. If expected revenue is in billions and reported is in millions, convert both to millions before
-           calculating the surprise percentage
-        4. For numbers with units (B for billions, M for millions), extract the number part and apply the scale:
+        3. For numbers with units (B for billions, M for millions), extract the number part and apply the scale:
            - 1B = 1000M (converting billions to millions)
            - 1M = 0.001B (converting millions to billions)
 
-        Ensure proper spacing between numbers and units (like "13.51B" not "13.51billion").
-        Use consistent decimal precision (two decimal places) for all numerical values.
+        # CRUCIAL FORMATTING REQUIREMENTS:
+        1. Use proper spacing between all words and numbers (e.g., "39.33 billion" NOT "39.33billion")
+        2. Insert spaces between each word in your text
+        3. Format numbers consistently with proper units (e.g., "$13.51B" not "$13.51billion")
+        4. Ensure proper spacing after each punctuation mark
+        5. Maintain proper spacing between all words in sentences
+        6. DO NOT use markdown tables with | characters - use proper HTML <table>, <tr>, <th>, <td> tags
+        7. DO NOT use markdown for any part of your response - use HTML tags for everything
         """
 
         # Make the API request with the correct document format
@@ -127,7 +194,19 @@ def analyze_earnings_documents(client, press_release_bytes, presentation_bytes, 
             model="claude-3-7-sonnet-20250219",
             max_tokens=4000,
             temperature=0,
-            system="You are a financial analyst specialized in earnings report analysis. Be extremely precise with numbers, calculations, and ensure consistent formatting of tables.",
+            system="""You are a financial analyst specialized in earnings report analysis with expertise in markdown formatting.
+
+Your task is to analyze financial documents and present the results in perfectly formatted markdown.
+
+CRITICALLY IMPORTANT: Your output must have proper spacing between ALL words. Never run words together.
+Always insert spaces between words. Format all text as properly spaced plain text.
+
+For example:
+✓ "NVIDIA reported revenue of 39.33 billion for Q4 FY2025, representing a 78% increase."
+✗ "NVIDIA reported revenueof 39.33billionforQ4FY2025, representinga78% increase."
+
+Your analysis will be rendered directly in a web application, so proper markdown formatting is essential.
+            """,
             messages=[
                 {
                     "role": "user",
@@ -157,68 +236,11 @@ def analyze_earnings_documents(client, press_release_bytes, presentation_bytes, 
         analysis_text = response.content[0].text
         print(f"Claude analysis completed in {time.time() - start_time:.2f} seconds")
 
-        # Parse the analysis to extract structured data
-        result = parse_analysis(analysis_text)
-        result["full_analysis"] = analysis_text
-
-        return result
+        return {"full_analysis": analysis_text}
 
     except Exception as e:
         print(f"\n!!! CLAUDE API ERROR !!!\n{str(e)}")
         return {"error": f"Error analyzing documents: {str(e)}"}
-
-
-def parse_analysis(analysis_text):
-    """Parse the analysis text to extract structured data."""
-    result = {
-        "earnings_table": None,
-        "financials_table": None,
-        "summary": None,
-        "price_prediction": None,
-        "latex_formula": None
-    }
-
-    # Extract tables
-    tables = {}
-    pattern = r'### ([^\n]+)\s*\n\s*\|([^\n]+)\|\s*\n\s*\|[-:\s\|]+\|\s*\n((?:\|[^\n]+\|\s*\n)*)'
-
-    for match in re.finditer(pattern, analysis_text):
-        header = match.group(1).strip()
-        table_header = match.group(2).strip()
-        table_content = match.group(3).strip()
-
-        # Format the full table
-        headers = [h.strip() for h in table_header.split('|') if h.strip()]
-        separator = '|' + '|'.join(['-' * (len(h) + 2) for h in headers]) + '|'
-        full_table = f"| {' | '.join(headers)} |\n{separator}\n{table_content}"
-        tables[header] = full_table
-
-    # Store tables in result
-    if "Earnings Calls" in tables:
-        result["earnings_table"] = tables["Earnings Calls"]
-    if "Financials" in tables:
-        result["financials_table"] = tables["Financials"]
-
-    # Extract summary (text outside of tables and formulas)
-    summary = re.sub(r'### [^\n]+\s*\n\s*\|[^\n]+\|\s*\n\s*\|[-:\s\|]+\|\s*\n((?:\|[^\n]+\|\s*\n)*)', '', analysis_text)
-    summary = re.sub(r'\$\$[^$]+\$\$|\$[^$]+\$', '', summary)  # Remove LaTeX
-    summary = re.sub(r'###[^\n]*\n', '', summary)  # Remove headers
-    summary = re.sub(r'\n{3,}', '\n\n', summary)  # Normalize spacing
-    result["summary"] = summary.strip()
-
-    # Extract LaTeX formula for price prediction
-    latex_pattern = r'\$([^$]+)\$'
-    latex_matches = re.findall(latex_pattern, analysis_text)
-    if latex_matches:
-        formula = latex_matches[0]
-        result["latex_formula"] = formula
-
-        # Try to extract the price prediction result
-        result_match = re.search(r'= (\d+\.\d+)$', formula)
-        if result_match:
-            result["price_prediction"] = float(result_match.group(1))
-
-    return result
 
 
 # =======================
@@ -229,13 +251,14 @@ def add_custom_styling():
     st.markdown("""
     <style>
     /* Improve table styling */
-    table {
+    .styled-table {
         width: 100%;
         border-collapse: collapse;
         margin-bottom: 20px;
+        font-size: 15px;
     }
 
-    th {
+    .styled-table th {
         background-color: #f1f8ff;
         font-weight: 600;
         text-align: left;
@@ -243,32 +266,59 @@ def add_custom_styling():
         border-bottom: 2px solid #ddd;
     }
 
-    td {
+    .styled-table td {
         padding: 10px 15px;
         border-bottom: 1px solid #ddd;
     }
 
-    tr:nth-child(even) {
+    .styled-table tr:nth-child(even) {
         background-color: #f8f9fa;
     }
 
-    /* Add styling for the summary section */
-    .summary-section {
-        background-color: #f8f9fa;
-        padding: 15px;
+    /* Add styling for the analysis section */
+    .earnings-analysis {
+        padding: 20px;
         border-radius: 5px;
-        border-left: 3px solid #4b6cb7;
-        margin-bottom: 20px;
+        border: 1px solid #e0e0e0;
+        margin-top: 20px;
+        margin-bottom: 30px;
+        background-color: white;
     }
 
-    /* Style for the prediction box */
-    .prediction-box {
+    /* Price prediction styling */
+    .price-prediction {
         background-color: #f0f5ff;
         padding: 15px;
         border-radius: 5px;
         border-left: 3px solid #4b6cb7;
         margin-top: 20px;
         margin-bottom: 20px;
+        font-weight: bold;
+        font-size: 18px;
+    }
+
+    /* Section headers */
+    .earnings-analysis h2 {
+        color: #1a56db;
+        padding-bottom: 10px;
+        border-bottom: 1px solid #eaecef;
+        margin-top: 30px;
+        margin-bottom: 20px;
+    }
+
+    .earnings-analysis h3 {
+        color: #2d3748;
+        margin-top: 25px;
+        margin-bottom: 15px;
+    }
+
+    /* Disclaimer text */
+    .disclaimer {
+        font-size: 12px;
+        color: #6c757d;
+        margin-top: 30px;
+        padding-top: 10px;
+        border-top: 1px solid #eaecef;
     }
     </style>
     """, unsafe_allow_html=True)
@@ -346,36 +396,83 @@ def main():
                 st.stop()
 
         # Display results
-        st.subheader(f"{company_name} ({ticker_symbol}) Earnings Analysis")
+        st.header(f"{company_name} ({ticker_symbol}) Earnings Analysis")
 
-        # Display tables
-        if results.get("earnings_table"):
-            st.markdown("### Earnings Calls")
-            st.markdown(results["earnings_table"])
+        # Process markdown tables to ensure they render properly
+        def fix_markdown_tables(content):
+            # Look for table content with pipe characters
+            table_pattern = r'\|(.*?)\|\s*\n'
+            table_matches = re.findall(table_pattern, content, re.MULTILINE | re.DOTALL)
 
-        if results.get("financials_table"):
-            st.markdown("### Financials")
-            st.markdown(results["financials_table"])
+            if table_matches:
+                # This content contains tables that need fixing
 
-        # Display summary
-        if results.get("summary"):
-            st.markdown("### Analysis Summary")
-            st.markdown(f'<div class="summary-section">{results["summary"]}</div>', unsafe_allow_html=True)
+                # First, identify complete tables
+                table_blocks = re.findall(r'(\|.*?\|.*?\n\|[-:|\s]+\|\n(?:\|.*?\|.*?\n)+)', content,
+                                          re.MULTILINE | re.DOTALL)
 
-        # Display price prediction
-        if results.get("latex_formula"):
-            st.markdown('<div class="prediction-box">', unsafe_allow_html=True)
-            st.markdown("### Post-Earnings Price Prediction")
-            st.latex(results["latex_formula"])
-            st.markdown('</div>', unsafe_allow_html=True)
+                for table_block in table_blocks:
+                    # Create a proper HTML table replacement
+                    html_table = '<table class="styled-table">\n<thead>\n<tr>\n'
 
-        # Show full analysis in expander
-        with st.expander("View Full Analysis"):
-            st.markdown(results.get("full_analysis", "No full analysis available"))
+                    # Get the rows
+                    rows = table_block.strip().split('\n')
+
+                    # Process header row
+                    header_cells = [cell.strip() for cell in rows[0].split('|') if cell.strip()]
+                    for cell in header_cells:
+                        html_table += f'<th>{cell}</th>\n'
+
+                    html_table += '</tr>\n</thead>\n<tbody>\n'
+
+                    # Skip the header and separator lines (rows[0] and rows[1])
+                    for row in rows[2:]:
+                        if '|' in row:  # Make sure it's a table row
+                            html_table += '<tr>\n'
+                            cells = [cell.strip() for cell in row.split('|') if cell]
+                            for cell in cells:
+                                html_table += f'<td>{cell}</td>\n'
+                            html_table += '</tr>\n'
+
+                    html_table += '</tbody>\n</table>'
+
+                    # Replace the markdown table with the HTML table
+                    content = content.replace(table_block, html_table)
+
+            return content
+
+        # Display the analysis
+        if results.get("full_analysis"):
+            analysis_content = results.get("full_analysis")
+
+            # 1. Replace markdown headers with HTML headers
+            analysis_content = re.sub(r'## ([^\n]+)', r'<h2>\1</h2>', analysis_content)
+            analysis_content = re.sub(r'### ([^\n]+)', r'<h3>\1</h3>', analysis_content)
+
+            # 2. Fix any tables in the content
+            analysis_content = fix_markdown_tables(analysis_content)
+
+            # 3. Format the price prediction section
+            price_prediction_pattern = r'<h3>Price Prediction</h3>\s*(.+?)\s*(?=<h|$)'
+            price_prediction_match = re.search(price_prediction_pattern, analysis_content, re.DOTALL)
+
+            if price_prediction_match:
+                price_text = price_prediction_match.group(1).strip()
+                # Format the price prediction with proper styling
+                formatted_price = f'<div class="price-prediction">{price_text}</div>'
+                analysis_content = analysis_content.replace(price_prediction_match.group(0),
+                                                            f'<h3>Price Prediction</h3>\n{formatted_price}\n\n')
+
+            # Display the formatted analysis
+            st.markdown(f'<div class="earnings-analysis">{analysis_content}</div>', unsafe_allow_html=True)
+        else:
+            st.error("No analysis was generated.")
 
     st.markdown("---")
-    st.caption(
-        "This AI-powered financial analysis is for informational purposes only and should not be considered financial advice.")
+    st.markdown(
+        '<p class="disclaimer">This AI-powered financial analysis is for informational purposes only and should not be considered financial advice.</p>',
+        unsafe_allow_html=True
+    )
 
 
 if __name__ == "__main__":
