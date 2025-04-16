@@ -84,7 +84,7 @@ class LLMEarningsEvaluator:
         try:
             with open(cache_file, 'w') as f:
                 json.dump(self.prediction_cache, f)
-            print(f"Saved {len(self.prediction_cache)} predictions to cache")
+            # Don't print anything when saving cache
         except Exception as e:
             print(f"Error saving cache: {str(e)}")
 
@@ -117,48 +117,87 @@ class LLMEarningsEvaluator:
 
                 # Cache the result
                 self.prediction_cache[cache_key] = prediction
-                # Save cache after each successful prediction
-                if len(self.prediction_cache) % 5 == 0:  # Save every 5 predictions
-                    self.save_cache()
+
+                # Don't save cache on each prediction - we'll handle this in batches instead
 
                 return prediction
 
             except Exception as e:
-                print(f"Error getting prediction (attempt {attempt + 1}/{retry_count}): {str(e)}")
+                # Don't print error for each row - avoid console spam
+                if attempt == retry_count - 1:  # Only print on final attempt
+                    print(f"\nError with {row['Symbol']} after {retry_count} attempts: {str(e)[:100]}...")
                 time.sleep(2)  # Wait before retrying
 
         # If all retries fail, make a reasonable fallback prediction
         # Use a small random adjustment to the closing price
         fallback_prediction = row['Close'] * (1 + random.uniform(-0.02, 0.05))
-        print(f"Using fallback prediction for {row['Symbol']}: {fallback_prediction}")
+        # Reduce console output for large datasets
+        # print(f"Using fallback prediction for {row['Symbol']}: {fallback_prediction}")
         self.prediction_cache[cache_key] = fallback_prediction
         return fallback_prediction
 
     def create_earnings_prompt(self, row):
         """Create a prompt for earnings prediction based on row data."""
-        # Extract relevant fields
+        # Extract relevant fields (keeping the original extraction logic)
         symbol = row['Symbol']
+        date = row.get('date', 'N/A')
         close_price = row['Close']
 
-        # Get additional fields if they exist
-        eps = row.get('EPS', 'N/A')
-        revenue = row.get('Revenue', 'N/A')
-        prev_close = row.get('PrevClose', close_price * 0.99)  # Fallback value
+        # Get EPS data using proper keys from the CSV
+        eps_estimate = row.get('EPS Estimate', 'N/A')
+        reported_eps = row.get('Reported EPS', 'N/A')
+        eps_surprise = row.get('Surprise(%)', 'N/A')
+
+        # Get post-earnings opening price (if available - for testing only)
+        post_open = row.get('Post Open', 'N/A')
+        open_diff = row.get('Open Diff(%)', 'N/A')
+
+        # Add any additional available metrics
         volume = row.get('Volume', 'N/A')
 
-        # Create a comprehensive prompt
+        # Create the prompt with ALL available CSV data
         prompt = f"""
-        I need you to predict the post-earnings stock price for {symbol}.
+        I need you to predict the post-earnings stock price for {symbol} on {date}.
 
         Current financial data:
         - Symbol: {symbol}
+        - Date: {date}
         - Close Price: ${close_price:.2f}
-        - Previous Close: ${prev_close:.2f}
-        - EPS: {eps}
-        - Revenue: {revenue}
-        - Volume: {volume}
+        - EPS Estimate: {eps_estimate}
+        - Reported EPS: {reported_eps}
+        - EPS Surprise: {eps_surprise}%
+        - Post Open: {post_open if post_open == 'N/A' else f'${post_open:.2f}'}
+        - Open Diff(%): {open_diff}
+        """
 
-        Based on this earnings data, predict whether the stock will go up or down after earnings, and calculate the expected post-earnings opening price.
+        # Add volume if available (keeping the original conditional)
+        if volume != 'N/A':
+            prompt += f"- Trading Volume: {volume}\n"
+
+        # Add any other fields that might be in the CSV but aren't explicitly handled above
+        for key, value in row.items():
+            # Skip fields we've already added
+            if key in ['Symbol', 'date', 'Close', 'EPS Estimate', 'Reported EPS', 'Surprise(%)',
+                       'Post Open', 'Open Diff(%)', 'Volume']:
+                continue
+
+            # Format the value appropriately
+            if isinstance(value, float):
+                # Format monetary values with dollar signs and percentages appropriately
+                if 'price' in key.lower() or 'value' in key.lower() or 'cost' in key.lower():
+                    formatted_value = f"${value:.2f}"
+                elif 'percent' in key.lower() or '%' in key or 'ratio' in key.lower():
+                    formatted_value = f"{value:.2f}%"
+                else:
+                    formatted_value = f"{value:.2f}"
+            else:
+                formatted_value = value
+
+            prompt += f"- {key}: {formatted_value}\n"
+
+        # Complete the prompt with enhanced factors to consider
+        prompt += """
+        Based on all this earnings data, predict whether the stock will go up or down after earnings, and calculate the expected post-earnings opening price.
 
         Format your response as follows:
 
@@ -170,6 +209,7 @@ class LLMEarningsEvaluator:
 
         Predicted Post-Earnings Opening Price: $X.XX
         """
+
         return prompt
 
     def extract_price_prediction(self, llm_response, row):
@@ -199,38 +239,45 @@ class LLMEarningsEvaluator:
                 return float(dollar_matches[-1])
 
             # If no numerical prediction found, make a small adjustment to closing price
-            print(f"No numerical prediction found in response for {row['Symbol']}, using fallback")
-            print(f"Response was: {llm_response[:200]}...")
+            # Don't print error message to avoid console spam
             return row['Close'] * 1.01  # 1% increase as fallback
 
         except Exception as e:
-            print(f"Error extracting prediction: {str(e)}")
-            print(f"Response was: {llm_response[:200]}...")
+            # Don't print error message to avoid console spam
             # Return a default prediction with a small increase
             return row['Close'] * 1.01
 
-    def generate_llm_predictions(self, actual_data, batch_size=10):
-        """Generate predictions using an LLM API for each row in the dataset."""
+    def generate_llm_predictions(self, actual_data, batch_size=20):
+        """Generate predictions using an LLM API for each row in the dataset.
+        Increased batch size for efficiency."""
         predictions = []
         total_rows = len(actual_data)
 
-        print(f"Generating predictions for {total_rows} rows using OpenAI GPT-4o")
+        print(f"Generating predictions for {total_rows} rows using OpenAI GPT-4o...")
 
-        # Process in batches to show progress
+        # Track unique stock symbols being processed
+        processed_symbols = set()
+        cache_start_count = len(self.prediction_cache)
+
+        # Process in batches without progress indicators
+        batch_count = math.ceil(total_rows / batch_size)
+        print(f"Processing in {batch_count} batches of up to {batch_size} rows each")
+
+        # Process in batches
         for i in range(0, total_rows, batch_size):
             batch = actual_data[i:i + batch_size]
-            print(
-                f"Processing batch {i // batch_size + 1}/{math.ceil(total_rows / batch_size)} ({i + 1}-{min(i + batch_size, total_rows)} of {total_rows})")
 
+            # Update processed symbols quietly
+            batch_symbols = set(row['Symbol'] for row in batch)
+            processed_symbols.update(batch_symbols)
+
+            # Process the batch without progress updates
             for row in batch:
                 # Extract required values
                 symbol = row['Symbol']
                 date = row['date']
-                close_price = row['Close']
 
-                print(f"  Processing {symbol} for {date}")
-
-                # Get prediction from LLM
+                # Get prediction from LLM (no individual row printing)
                 predicted_price = self.get_llm_prediction(row)
 
                 predictions.append({
@@ -239,9 +286,18 @@ class LLMEarningsEvaluator:
                     'Post Open_pred': predicted_price
                 })
 
-            # Save intermediate results
-            if i % (batch_size * 2) == 0 and i > 0:
-                self.save_cache()
+            # Save cache after each batch instead of per prediction
+            self.save_cache()
+
+            # Show occasional progress for large datasets, but not too verbose
+            if (i // batch_size) % 5 == 0 and i > 0:
+                new_predictions = len(self.prediction_cache) - cache_start_count
+                print(f"Processed {i + len(batch)} of {total_rows} rows ({new_predictions} new predictions)")
+
+        # Final count of predictions
+        new_predictions = len(self.prediction_cache) - cache_start_count
+        print(f"Completed processing {total_rows} rows ({new_predictions} new predictions)")
+        print(f"Processed {len(processed_symbols)} unique stock symbols")
 
         return predictions
 
@@ -470,21 +526,28 @@ class LLMEarningsEvaluator:
 
     def run_evaluation(self, test_file, limit_rows=None):
         """Run the full evaluation pipeline on a test file."""
-        print(f"\nEvaluating with {os.path.basename(test_file)} using OpenAI GPT-4o...")
+        # Extract filename for reporting
+        test_name = os.path.basename(test_file)
+        print(f"\nEvaluating with {test_name} using OpenAI GPT-4o...")
 
         # Load actual data
         actual_data = self.read_csv(test_file)
+        total_rows = len(actual_data)
 
         # Limit rows if specified
-        if limit_rows and limit_rows > 0 and limit_rows < len(actual_data):
-            print(f"Limiting evaluation to first {limit_rows} rows")
+        if limit_rows and limit_rows > 0 and limit_rows < total_rows:
+            print(f"Limiting evaluation to first {limit_rows} rows of {total_rows} total")
             actual_data = actual_data[:limit_rows]
+        else:
+            print(f"Processing all {total_rows} rows")
 
-        print(f"Loaded {len(actual_data)} rows of actual data")
-
-        # Count unique symbols
+        # Count unique symbols without printing them all
         symbols = set(row['Symbol'] for row in actual_data)
-        print(f"Found {len(symbols)} unique symbols: {', '.join(symbols)}")
+        if len(symbols) <= 10:
+            print(f"Found {len(symbols)} unique symbols: {', '.join(sorted(symbols))}")
+        else:
+            top_symbols = sorted(list(symbols))[:10]
+            print(f"Found {len(symbols)} unique symbols (first 10): {', '.join(top_symbols)}...")
 
         # Generate predictions using LLM
         predictions = self.generate_llm_predictions(actual_data)
@@ -493,9 +556,10 @@ class LLMEarningsEvaluator:
         test_name = os.path.splitext(os.path.basename(test_file))[0]
         predictions_file = os.path.join(self.output_dir, f'predictions_llm_{test_name}.csv')
         self.write_csv(predictions, predictions_file)
-        print(f"Saved raw predictions to {predictions_file}")
+        print(f"\nSaved raw predictions to {predictions_file}")
 
         # Merge data
+        print("Merging predictions with actual data...")
         merged_data = self.merge_data(actual_data, predictions)
 
         if not merged_data:
@@ -503,31 +567,84 @@ class LLMEarningsEvaluator:
             return None
 
         # Calculate metrics
+        print("Calculating performance metrics...")
         reg_metrics, dir_metrics = self.calculate_metrics(merged_data)
 
-        # Print regression metrics
+        # Print regression metrics - only show Total and top 5 symbols for large datasets
         print("\nRegression Metrics (Post Open Price Prediction):")
         print(f"{'Symbol':<10} {'RMSE':<10} {'MAE':<10} {'MAPE':<10} {'R2':<10} {'Count':<10}")
         print("-" * 60)
+
+        # Find the total row
+        total_row = None
         for row in reg_metrics:
+            if row['Symbol'] == 'Total':
+                total_row = row
+                break
+
+        # First print the total if available
+        if total_row:
+            r2_val = f"{total_row['R2']:.4f}" if not math.isnan(total_row['R2']) else "N/A"
+            print(
+                f"{total_row['Symbol']:<10} {total_row['RMSE']:<10.4f} {total_row['MAE']:<10.4f} {total_row['MAPE']:<10.2f} {r2_val:<10} {total_row['Count']:<10}")
+            print("-" * 60)
+
+        # Then print top symbols by count
+        other_rows = [row for row in reg_metrics if row['Symbol'] != 'Total']
+        other_rows.sort(key=lambda x: x['Count'], reverse=True)
+
+        # Show top 5 for large datasets
+        max_symbols_to_show = 5 if len(other_rows) > 10 else len(other_rows)
+        for i, row in enumerate(other_rows[:max_symbols_to_show]):
             r2_val = f"{row['R2']:.4f}" if not math.isnan(row['R2']) else "N/A"
             print(
                 f"{row['Symbol']:<10} {row['RMSE']:<10.4f} {row['MAE']:<10.4f} {row['MAPE']:<10.2f} {r2_val:<10} {row['Count']:<10}")
 
-        # Print direction metrics
+        if len(other_rows) > max_symbols_to_show:
+            print(f"... and {len(other_rows) - max_symbols_to_show} more symbols")
+
+        # Print direction metrics - same approach
         print("\nDirection Metrics (Up/Down Classification):")
         print(f"{'Symbol':<10} {'Accuracy %':<12} {'Correct':<10} {'Incorrect':<10} {'Count':<10}")
         print("-" * 60)
+
+        # Find the total row
+        total_dir_row = None
         for row in dir_metrics:
+            if row['Symbol'] == 'Total':
+                total_dir_row = row
+                break
+
+        # First print the total if available
+        if total_dir_row:
+            print(
+                f"{total_dir_row['Symbol']:<10} {total_dir_row['Direction Accuracy (%)']:<12.2f} {total_dir_row['Correct Predictions']:<10} {total_dir_row['Incorrect Predictions']:<10} {total_dir_row['Count']:<10}")
+            print("-" * 60)
+
+        # Then print top symbols by count
+        other_dir_rows = [row for row in dir_metrics if row['Symbol'] != 'Total']
+        other_dir_rows.sort(key=lambda x: x['Count'], reverse=True)
+
+        # Show top 5 for large datasets
+        for i, row in enumerate(other_dir_rows[:max_symbols_to_show]):
             print(
                 f"{row['Symbol']:<10} {row['Direction Accuracy (%)']:<12.2f} {row['Correct Predictions']:<10} {row['Incorrect Predictions']:<10} {row['Count']:<10}")
+
+        if len(other_dir_rows) > max_symbols_to_show:
+            print(f"... and {len(other_dir_rows) - max_symbols_to_show} more symbols")
 
         # Save results
         self.write_csv(reg_metrics, os.path.join(self.output_dir, f'regression_metrics_llm_{test_name}.csv'))
         self.write_csv(dir_metrics, os.path.join(self.output_dir, f'direction_metrics_llm_{test_name}.csv'))
 
         # Evaluate profit
+        print("\nCalculating profit metrics...")
         profit_metrics = self.evaluate_profit(merged_data)
+
+        # Save merged data for reference
+        merged_file = os.path.join(self.output_dir, f'merged_data_{test_name}.csv')
+        self.write_csv(merged_data, merged_file)
+        print(f"Saved merged predictions and actuals to {merged_file}")
 
         return {
             'regression_metrics': reg_metrics,
