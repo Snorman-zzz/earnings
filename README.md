@@ -1,67 +1,126 @@
-# Financial Analysis System
+# FinSight AI: Automated Earnings Analysis & Stock Price Prediction
 
-[![Streamlit](https://static.streamlit.io/badges/streamlit_badge_black_white.svg)](https://your-app-url.herokuapp.com)
-[![Python 3.11](https://img.shields.io/badge/python-3.11.11-blue.svg)](https://www.python.org/downloads/)
+FinSight AI is a comprehensive tool for automating the analysis of corporate earnings reports and predicting post-earnings stock price movements. It combines Large Language Models (LLMs) and traditional financial analysis techniques to extract key information from earnings documents, analyze financial metrics, and generate insightful reports with price predictions.
 
-## Development Setup
+## Project Overview
 
-### 1. Create Conda Environment
+FinSight AI streamlines the financial analysis workflow by:
+
+1. Analyzing earnings press releases and presentation slides uploaded as PDFs
+2. Automatically extracting key financial metrics (EPS, revenue, margins, etc.)
+3. Comparing reported figures to Wall Street expectations
+4. Calculating year-over-year growth rates and surprise percentages
+5. Generating comprehensive analysis reports with price predictions
+
+## System Architecture
+
+The system is built on a modular architecture with three main components:
+
+### 1. PDF Analysis Module (`claude_pdf_analyzer.py`)
+
+The PDF analyzer uses Anthropic's Claude API to extract financial information from earnings documents. It:
+- Processes PDF files using Claude's document understanding capabilities
+- Extracts precise numerical data from complex financial documents
+- Formats the data into structured tables and analysis
+
+### 2. Financial Data Integration (`financial_agents.py`)
+
+The financial agents framework:
+- Fetches real-time market data and analyst estimates using yfinance
+- Provides tools for retrieving stock prices and consensus expectations
+- Implements a custom agent architecture for financial reasoning
+- Structures data into a coherent workflow
+
+### 3. Web Application (`app.py`)
+
+The streamlit-based web application:
+- Provides an intuitive interface for document uploads
+- Displays financial analysis in a well-formatted layout
+- Shows earnings tables, financial metrics, and price predictions
+- Handles user inputs and validation
+
+## Installation
+
+1. Clone the repository:
 ```bash
-conda create -n Agents_Env python=3.11.11 -y
+git clone https://github.com/your-username/finsight-ai.git
+cd finsight-ai
 ```
 
-### 2. Activate Environment
+2. Install dependencies:
 ```bash
-conda activate Agents_Env
+pip install -r requirements.txt
 ```
 
-### 3. Navigate to Project
+3. Set up environment variables:
+Create a `.env` file in the root directory with:
+```
+ANTHROPIC_API_KEY=your_anthropic_api_key
+OPENAI_API_KEY=your_openai_api_key  # If using OpenAI models
+```
+
+## Usage
+
+1. Run the Streamlit application:
 ```bash
-cd path/to/your/project  # Replace with actual path containing pyproject.toml
+streamlit run app.py
 ```
 
-### 4. Install Dependencies (Editable Mode)
-```bash
-pip install -e .
+2. Upload documents:
+   - Earnings press release (PDF)
+   - Earnings presentation slides (PDF)
+
+3. Enter company information:
+   - Company name
+   - Stock ticker symbol
+
+4. Click "Generate Comprehensive Analysis" to process the documents
+
+5. Review the analysis:
+   - Earnings Calls table (Expected vs. Reported)
+   - Financials table (Current Quarter vs. Previous Year)
+   - Analysis summary
+   - Post-earnings price prediction
+
+## Code Structure
+
+```
+finsight-ai/
+├── claude_pdf_analyzer.py  # PDF analysis using Claude API
+├── financial_agents.py     # Agent framework and financial tools
+├── app.py                  # Streamlit web application
+├── requirements.txt        # Project dependencies
+└── README.md               # This file
 ```
 
-### 5. Launch Development Server
-```bash
-langgraph dev
-```
+## Key Features
 
-## Production Usage
-```bash
-streamlit run src/react_agent/financial_analyst_app.py
-```
+- **Multi-model analysis**: Compares LLM-based approaches with traditional methods
+- **Precise numerical extraction**: High accuracy in extracting financial metrics
+- **Unit normalization**: Automatically handles different numerical formats (B vs M)
+- **Structured output**: Well-formatted tables and LaTeX formulas for price predictions
+- **Web-based interface**: Easy-to-use interface for document uploads and analysis
 
-## Key Dependencies
-| Package         | Version  | Purpose                      |
-|-----------------|----------|------------------------------|
-| langgraph       | ≥0.2.0   | Workflow orchestration        |
-| openai          | ≥1.30.1  | LLM integration & file search|
-| streamlit       | ≥1.33.0  | Web interface                |
+## Limitations and Future Work
 
-Full list in [pyproject.toml](pyproject.toml)
+- Currently optimized for quarterly earnings reports in standard formats
+- Price predictions are based on earnings surprise and market data, not comprehensive market models
+- Future improvements planned:
+  - Support for more document types (annual reports, investor presentations)
+  - Enhanced time-series analysis for better price predictions
+  - Sector-specific analysis customizations
+  - Expanded historical data integration
 
-## Configuration
-```ini
-# .env
-OPENAI_API_KEY=your-api-key-here
-```
+## Contributors
 
-![Development Workflow](docs/dev_workflow.png)
+- Ziqi Shao: ML method development
+- Zhixiao Wu: Refinement of two methods, dataset collection and evaluation
+- Mingze Yuan: LLM method development
 
-> **Note**: Editable mode (`-e .`) links live code changes without reinstallation
-```
+## License
 
-Changes made:
-1. Added dedicated "Development Setup" section with Conda instructions
-2. Separated production vs development launch commands
-3. Added langgraph to dependencies table
-4. Included note about editable installations
-5. Added reference to pyproject.toml
-6. Updated Python version badge to 3.11.11
-7. Added visual for development workflow
+This project was developed as part of the CS7180: Special Topics in Generative AI course at Northeastern University.
 
-The original features and architecture sections remain unchanged but would appear after these setup instructions in a full README.
+---
+
+This AI-powered financial analysis tool is for informational purposes only and should not be considered financial advice.
