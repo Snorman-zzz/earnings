@@ -1,0 +1,56 @@
+[project]
+name = "financial-analysis"
+version = "0.1.0"
+description = "Financial analyst system for earnings report analysis using Claude and OpenAI"
+authors = [
+    { name = "Your Name", email = "your.email@example.com" },
+]
+readme = "README.md"
+license = { text = "MIT" }
+requires-python = ">=3.11,<4.0"
+dependencies = [
+    "langgraph>=0.2.6",
+    "langchain-openai>=0.1.22",
+    "langchain-anthropic>=0.1.23",
+    "langchain-core>=0.2.14",
+    "python-dotenv>=1.0.1",
+    "anthropic>=0.18.0",
+    "yfinance>=0.2.35",
+    "streamlit>=1.33.0",
+    "tenacity>=8.2.3"
+]
+
+[project.optional-dependencies]
+dev = ["mypy>=1.11.1", "ruff>=0.6.1"]
+
+[build-system]
+requires = ["setuptools>=73.0.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+packages = ["langgraph.templates.financial_analysis", "financial_analysis"]
+[tool.setuptools.package-dir]
+"langgraph.templates.financial_analysis" = "src/financial_analysis"
+"financial_analysis" = "src/financial_analysis"
+
+[tool.setuptools.package-data]
+"*" = ["py.typed"]
+
+[tool.ruff]
+lint.select = [
+    "E",    # pycodestyle
+    "F",    # pyflakes
+    "I",    # isort
+    "D",    # pydocstyle
+    "UP",
+]
+lint.ignore = [
+    "UP006",
+    "UP007",
+    "UP035",
+    "D417",
+    "E501",
+]
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"
