@@ -11,6 +11,7 @@ node_modules/
 # IDE
 .vscode/
 .idea/
+.claude/
 *.swp
 *.swo
 
