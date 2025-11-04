@@ -1,0 +1,9 @@
+Symbol,Direction Accuracy (%),Correct Predictions,Incorrect Predictions,Up Predictions,Down Predictions,Actual Ups,Actual Downs,Count
+NVDA,70.0,7.0,3.0,10.0,0.0,7.0,3.0,10.0
+GOOGL,80.0,8.0,2.0,8.0,2.0,6.0,4.0,10.0
+AMZN,60.0,6.0,4.0,8.0,2.0,6.0,4.0,10.0
+AAPL,70.0,7.0,3.0,9.0,1.0,6.0,4.0,10.0
+MSFT,70.0,7.0,3.0,10.0,0.0,7.0,3.0,10.0
+META,60.0,6.0,4.0,8.0,2.0,6.0,4.0,10.0
+TSLA,50.0,5.0,5.0,4.0,6.0,3.0,7.0,10.0
+Total,65.71428571428571,46.0,24.0,57.0,13.0,41.0,29.0,70.0
