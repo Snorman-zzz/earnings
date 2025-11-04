@@ -1,0 +1,27 @@
+# Core OpenAI dependencies
+openai>=2.7.1
+
+# Streamlit UI
+streamlit==1.30.0
+
+# LangChain RAG framework
+langchain>=0.3.0
+langchain-core>=0.3.0
+langchain-openai>=0.2.0
+langchain-community>=0.3.0
+langgraph>=0.2.0
+
+# Document processing
+docling>=2.0.0
+pypdf>=4.0.0
+
+# Vector database
+chromadb>=0.5.0
+rank-bm25>=0.2.2
+
+# Market data
+yfinance==0.2.35
+
+# Utilities
+tenacity==8.2.3
+python-dotenv==1.0.0
